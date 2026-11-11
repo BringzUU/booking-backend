@@ -18,6 +18,16 @@ Set `DATABASE_URL` and set `ALLOWED_ORIGINS` to the frontend origin, such as
 Enter the origin without a path or trailing slash. Local React origins on
 ports 3000 and 5173 are allowed by default.
 
+## Backend tests
+
+Run `go test ./...` for the local CORS tests. To run the booking flow with
+PostgreSQL, set `BOOKING_TEST_DATABASE_URL` to a test database with the same
+tables and session migration, then run `go test -v ./handler -run TestBookingFlow`.
+The integration test creates three disposable users and a room and cleans up
+their records after the run.
+
+## Demo account
+
 To provision an admin, first register a dedicated account through the API,
 then update that exact account using the Supabase SQL Editor:
 
