@@ -23,6 +23,7 @@ func (h *Handler) Routes() http.Handler {
 	})
 	mux.HandleFunc("GET /api/rooms", h.listRooms)
 	mux.HandleFunc("GET /api/rooms/{id}", h.getRoom)
+	mux.HandleFunc("GET /api/rooms/{id}/availability", h.roomAvailability)
 	mux.HandleFunc("POST /api/auth/register", h.register)
 	mux.HandleFunc("POST /api/auth/login", h.login)
 	mux.HandleFunc("POST /api/auth/logout", h.requireUser(false, h.logout))

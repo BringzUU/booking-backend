@@ -112,6 +112,23 @@ func TestBookingFlow(t *testing.T) {
 		"room_id": roomID, "booking_date": time.Now().In(bangkokTime).AddDate(0, 0, 2).Format("2006-01-02"),
 		"start_time": "09:00", "end_time": "10:00",
 	}
+	date := input["booking_date"].(string)
+	availabilityPath := fmt.Sprintf("/api/rooms/%d/availability?date=%s", roomID, date)
+	checkAvailability := func(expected int) {
+		t.Helper()
+		w := request("GET", availabilityPath, "", nil)
+		want(w, 200)
+		var result availability
+		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil ||
+			result.RoomID != roomID || result.BookingDate != date ||
+			result.Occupied == nil || len(result.Occupied) != expected {
+			t.Fatalf("unexpected availability: %s", w.Body.String())
+		}
+		if expected == 1 && result.Occupied[0] != (occupiedPeriod{"09:00:00", "10:00:00"}) {
+			t.Fatalf("unexpected occupied period: %+v", result.Occupied[0])
+		}
+	}
+	checkAvailability(0)
 	var responses [2]*httptest.ResponseRecorder
 	var group sync.WaitGroup
 	for i, token := range []string{memberToken, otherToken} {
@@ -124,6 +141,7 @@ func TestBookingFlow(t *testing.T) {
 	}
 	want(responses[winner], 201)
 	want(responses[1-winner], 409)
+	checkAvailability(1)
 	var item booking
 	if err := json.Unmarshal(responses[winner].Body.Bytes(), &item); err != nil || item.ID < 1 || item.Status != "pending" {
 		t.Fatal("expected a pending booking")
@@ -144,7 +162,27 @@ func TestBookingFlow(t *testing.T) {
 	}
 	want(request("DELETE", memberPath, tokens[1-winner], nil), 404)
 	want(request("PUT", adminPath, adminToken, map[string]string{"status": "approved"}), 200)
+	checkAvailability(1)
+	dailyPath := "/api/admin/bookings?date=" + date
+	want(request("GET", dailyPath, memberToken, nil), 403)
+	daily := request("GET", dailyPath, adminToken, nil)
+	want(daily, 200)
+	var dailyBookings []booking
+	if err := json.Unmarshal(daily.Body.Bytes(), &dailyBookings); err != nil {
+		t.Fatal("invalid admin calendar response")
+	}
+	found := false
+	for _, row := range dailyBookings {
+		if row.BookingDate != date {
+			t.Fatal("admin calendar returned a booking outside the selected date")
+		}
+		found = found || row.ID == item.ID && row.Status == "approved"
+	}
+	if !found {
+		t.Fatal("approved booking missing from admin calendar")
+	}
 	want(request("DELETE", memberPath, tokens[winner], nil), 204)
+	checkAvailability(0)
 	want(request("POST", "/api/bookings", tokens[1-winner], input), 201)
 
 	want(request("PUT", "/api/auth/password", memberToken, map[string]string{

@@ -10,6 +10,7 @@ import (
 )
 
 const bookingColumns = "id, room_id, user_id, booking_date::text, start_time::text, end_time::text, note, status"
+const reservedBookingStatus = "status IN ('pending', 'approved', 'confirmed')"
 
 var errRoomTaken = errors.New("room already booked")
 var bangkokTime = time.FixedZone("ICT", 7*60*60)
@@ -35,6 +36,13 @@ func (h *Handler) listBookings(w http.ResponseWriter, r *http.Request, account u
 	if r.URL.Path == "/api/bookings" {
 		query += " WHERE user_id = $1"
 		args = append(args, account.ID)
+	} else if r.URL.Query().Has("date") {
+		date, ok := bookingDate(w, r)
+		if !ok {
+			return
+		}
+		query += " WHERE booking_date = $1::text::date"
+		args = append(args, date)
 	}
 	rows, err := h.DB.Query(r.Context(), query+" ORDER BY booking_date DESC, start_time DESC, id DESC", args...)
 	if err != nil {
@@ -89,7 +97,7 @@ func (h *Handler) createBooking(w http.ResponseWriter, r *http.Request, account 
 		var occupied bool
 		err = tx.QueryRow(ctx, `SELECT EXISTS (
 			SELECT 1 FROM public.bookings
-			WHERE room_id = $1 AND status IN ('pending', 'approved', 'confirmed')
+			WHERE room_id = $1 AND `+reservedBookingStatus+`
 			  AND booking_date = $2::text::date AND start_time < $4::text::time AND end_time > $3::text::time
 		)`, roomID, input.BookingDate, input.StartTime, input.EndTime).Scan(&occupied)
 		if err != nil {
